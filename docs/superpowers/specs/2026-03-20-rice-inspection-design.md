@@ -42,14 +42,42 @@ GET    /standard              → return all standards (cached from S3 at startu
 GET    /history               → list inspections (supports ?inspectionId= for partial match)
 GET    /history/:id           → get single full inspection
 POST   /history               → create inspection (triggers calculation)
-PUT    /history/:id           → update note/price/samplingPoint/samplingDate
+PUT    /history/:id           → update note/price/samplingPoint/samplingDate; sets updated_at = now
 DELETE /history               → delete multiple inspections (body: { ids: string[] })
 ```
 
+Note: `GET /standard` uses the singular form as specified in the Swagger contract.
+
 ### Startup Behavior
-- Fetch and cache `standards.json` from S3 once at startup
+- Fetch and cache `standards.json` from S3 once at startup (URL from `STANDARDS_JSON_URL` env var)
 - Run SQLite schema migrations on startup
 - No runtime refresh of standards
+
+### raw.json Fetch Strategy
+- `raw.json` is fetched **per-request** (not cached), since it represents live sample data
+- URL read from `RAW_JSON_URL` environment variable
+- If the fetch fails, return HTTP 502 with `{ error: "Failed to fetch raw grain data" }`
+- If the client uploads a file, the S3 fetch is skipped entirely
+
+### File Upload Handling
+- The frontend reads the `.json` file with `FileReader` and parses it as `RawGrain[]`
+- The parsed array is embedded in the JSON body as `rawData` — `POST /history` always uses `Content-Type: application/json`
+- No multipart/form-data upload
+- The frontend validates the parsed file conforms to `RawGrain[]` before submission and shows an inline error if malformed
+- The backend also validates `rawData` entries if present, returning HTTP 400 on invalid shape
+
+### DELETE with Body
+- `DELETE /history` sends `ids` in the JSON request body: `{ ids: string[] }`
+- The `fetch` call sets `method: 'DELETE'`, `Content-Type: application/json`, and `body: JSON.stringify({ ids })`
+- This is non-standard but supported by Express and the browser `fetch` API
+- If proxy compatibility becomes a concern, switch to `POST /history/delete`
+
+### Error Response Shape
+All error responses use the shape `{ error: string }` with an appropriate HTTP status code:
+- `400` — validation error
+- `404` — record not found
+- `502` — upstream fetch failure (S3/raw.json)
+- `500` — unexpected server error
 
 ### SQLite Schema
 ```sql
@@ -60,7 +88,7 @@ CREATE TABLE inspections (
   standard_name  TEXT NOT NULL,
   note           TEXT,
   price          REAL,
-  sampling_point TEXT,               -- JSON array string
+  sampling_point TEXT,               -- JSON array string e.g. '["Front End","Back End"]'
   sampling_date  TEXT,               -- ISO string
   total_sample   INTEGER NOT NULL,
   composition    TEXT NOT NULL,      -- JSON string (CompositionRow[])
@@ -72,9 +100,13 @@ CREATE TABLE inspections (
 
 JSON parse/stringify happens in the repo layer only — services always receive and return typed objects.
 
+### Input Validation (Backend)
+- `POST /history`: validate `name` (non-empty string), `standardId` (non-empty string), `price` (0–100000, 2 decimal places), `samplingPoint` (array of `'Front End' | 'Back End' | 'Other'`)
+- `PUT /history/:id`: validate same optional fields
+
 ### Inspection Calculation (`inspectionService.ts`)
 ```
-1. Receive grains (from uploaded file or fetched raw.json from S3)
+1. Receive grains (from uploaded rawData or fetched raw.json from S3)
 2. Load standard by standardId
 3. For each grain:
    - Match to a subStandard: grain.shape ∈ subStandard.shape AND
@@ -89,6 +121,22 @@ JSON parse/stringify happens in the repo layer only — services always receive 
 
 **Condition operators:** All four implemented correctly — GT (`>`), GE (`>=`), LT (`<`), LE (`<=`). A > vs >= mistake shifts grains between categories.
 
+**Shape matching:** `subStandard.shape` is an array and must be treated as a set. Use `subStandard.shape.includes(grain.shape)`. While current `standards.json` data has single-element shape arrays, multiple shapes per subStandard are valid and must work correctly.
+
+**Defect type display names:** The service uses a static lookup table to map `GrainType` to Thai display names:
+```typescript
+const DEFECT_NAMES: Record<GrainType, string> = {
+  white:     'ข้าวขาว',
+  yellow:    'ข้าวเหลือง',
+  red:       'ข้าวแดง',
+  damage:    'ข้าวเสีย',
+  paddy:     'ข้าวเปลือก',
+  chalky:    'ข้าวท้องไข่',
+  glutinous: 'ข้าวเหนียว',
+}
+```
+This lives in `services/inspectionService.ts`. It is not in `shared` because it is display logic, not a data contract.
+
 **Unmatched grains:** Skipped from composition/defect assignment but included in totalWeight. Prevents silent percentage inflation.
 
 **ID generation:** nanoid (shorter, cleaner in UI).
@@ -101,6 +149,7 @@ JSON parse/stringify happens in the repo layer only — services always receive 
 export type Condition = 'GT' | 'GE' | 'LT' | 'LE'
 export type GrainShape = 'wholegrain' | 'broken'
 export type GrainType = 'white' | 'yellow' | 'red' | 'damage' | 'paddy' | 'chalky' | 'glutinous'
+export type SamplingPoint = 'Front End' | 'Back End' | 'Other'
 
 export interface RawGrain {
   length: number
@@ -126,6 +175,9 @@ export interface Standard {
   standardData: SubStandard[]
 }
 
+// CompositionRow carries range fields (minLength, maxLength, conditionMin, conditionMax)
+// because the Result page spec requires a "Length" column showing the range per subStandard.
+// These are copied from SubStandard at calculation time and stored with the result.
 export interface CompositionRow {
   key: string
   name: string
@@ -151,7 +203,7 @@ export interface Inspection {
   standardName: string
   note?: string
   price?: number
-  samplingPoint?: string[]
+  samplingPoint?: SamplingPoint[]
   samplingDate?: string
   totalSample: number
   composition: CompositionRow[]
@@ -161,6 +213,7 @@ export interface Inspection {
 }
 
 // Lightweight type for GET /history list — no composition/defects
+// Intentionally omits price, samplingDate, samplingPoint (not needed in the list table)
 export interface HistoryListItem {
   id: string
   name: string
@@ -174,7 +227,7 @@ export interface CreateInspectionPayload {
   standardId: string
   note?: string
   price?: number
-  samplingPoint?: string[]
+  samplingPoint?: SamplingPoint[]
   samplingDate?: string
   rawData?: RawGrain[]   // if absent, backend fetches from S3
 }
@@ -182,7 +235,7 @@ export interface CreateInspectionPayload {
 export interface UpdateInspectionPayload {
   note?: string
   price?: number
-  samplingPoint?: string[]
+  samplingPoint?: SamplingPoint[]
   samplingDate?: string
 }
 ```
@@ -234,7 +287,11 @@ const inspectionSchema = z.object({
   name:           z.string().min(1, 'Name is required'),
   standardId:     z.string().min(1, 'Standard is required'),
   note:           z.string().optional(),
-  price:          z.number().min(0).max(100000).multipleOf(0.01).optional(),
+  // price: validate as string pattern first to avoid IEEE 754 floating-point issues,
+  // then coerce to number. Use z.string().regex(/^\d+(\.\d{1,2})?$/).transform(Number)
+  // instead of z.number().multipleOf(0.01) to prevent spurious validation failures.
+  price:          z.string().regex(/^\d+(\.\d{1,2})?$/).transform(Number)
+                    .refine(n => n >= 0 && n <= 100000).optional(),
   samplingPoint:  z.array(z.enum(['Front End', 'Back End', 'Other'])).optional(),
   samplingDate:   z.string().optional(),
 })
@@ -247,7 +304,7 @@ const editInspectionSchema = inspectionSchema.pick({
 ### React Query Keys
 ```typescript
 queryKeys = {
-  standards:   ['standards'],                          // cached indefinitely
+  standards:   ['standards'],                          // cached for session lifetime
   inspection:  (id: string) => ['inspection', id],
   history:     (inspectionId?: string) => ['history', inspectionId],
 }
@@ -255,14 +312,18 @@ queryKeys = {
 
 Standards are fetched only on `CreateInspection` page. `EditResult` never fetches standards — the standard is locked after creation.
 
-### API Client
+**Known limitation:** Standards are cached for the browser session. A page reload is required to pick up new standards after a backend restart.
+
+### API Client (`api/client.ts`)
+Note: `getStandards()` calls `GET /api/standard` (singular — intentional per spec).
+
 ```typescript
-getStandards(): Promise<Standard[]>
+getStandards(): Promise<Standard[]>           // → GET /api/standard
 createInspection(payload: CreateInspectionPayload): Promise<Inspection>
 getInspection(id: string): Promise<Inspection>
 updateInspection(id: string, payload: UpdateInspectionPayload): Promise<Inspection>
 getHistory(inspectionId?: string): Promise<HistoryListItem[]>
-deleteHistory(ids: string[]): Promise<void>
+deleteHistory(ids: string[]): Promise<void>   // DELETE with JSON body
 ```
 
 ---
@@ -272,13 +333,13 @@ deleteHistory(ids: string[]): Promise<void>
 ### Create Inspection
 ```
 User fills form → zod validates
-  → if file uploaded: FileReader parses .json → rawData in payload
-  → POST /api/history
-    → backend fetches raw.json (or uses rawData)
+  → if file uploaded: FileReader parses .json → validate as RawGrain[] → show error if invalid
+  → POST /api/history (Content-Type: application/json)
+    → backend fetches raw.json from S3 (or uses rawData if provided)
     → loads standard by standardId
     → inspectionService.calculate() → { composition, defects, totalSample }
     → save to SQLite → return Inspection
-  → invalidate ['history'] cache
+  → queryClient.invalidateQueries({ queryKey: ['history'] })  // prefix invalidation, clears all history queries
   → navigate to /result/:id
 ```
 
@@ -293,8 +354,9 @@ User fills form → zod validates
 ```
 User edits form → zod validates (editInspectionSchema)
   → PUT /api/history/:id
-    → backend updates record → return updated Inspection
-  → invalidate ['inspection', id] cache
+    → backend updates record, sets updated_at = now → return updated Inspection
+  → queryClient.invalidateQueries({ queryKey: ['inspection', id] })
+  → queryClient.invalidateQueries({ queryKey: ['history'] })  // note is in HistoryListItem
   → navigate to /result/:id
 ```
 
@@ -306,18 +368,19 @@ User edits form → zod validates (editInspectionSchema)
 
 Search: user types ID → clicks Search
   → useQuery(['history', inspectionId]) → GET /api/history?inspectionId=xxx
-  → partial match filter on backend → re-renders table
+  → partial match filter on backend using SQLite LIKE '%xxx%' → re-renders table
+  → match is case-sensitive for non-ASCII; nanoid IDs are ASCII-only so LIKE is safe
 
 Delete: user selects rows → clicks Delete
-  → DELETE /api/history { ids: [...] }
-  → invalidate ['history'] cache → table re-fetches
+  → DELETE /api/history { ids: [...] } (JSON body)
+  → queryClient.invalidateQueries({ queryKey: ['history'] })  // prefix invalidation, clears all history queries → table re-fetches
 ```
 
 ### Standards Dropdown (Create only)
 ```
 CreateInspection mounts
   → useQuery(['standards']) → GET /api/standard
-  → cached indefinitely — no re-fetch on subsequent visits
+  → cached for session — no re-fetch on subsequent visits
 ```
 
 ---
@@ -330,7 +393,7 @@ CreateInspection mounts
 
 ---
 
-## Decisions Log
+## 7. Decisions Log
 
 | Decision | Choice | Reason |
 |---|---|---|
@@ -345,3 +408,6 @@ CreateInspection mounts
 | History search | `?inspectionId=` partial match only | Better UX than exact-match `/history/:id` |
 | Standards on Edit | Not fetched | Standard locked after creation |
 | Unmatched grains | Skip but count in totalWeight | No silent percentage inflation |
+| File upload transport | JSON body with embedded `rawData` | Simpler than multipart; no binary data |
+| DELETE body | JSON body with `ids` | Matches Swagger spec; supported by fetch + Express |
+| `SamplingPoint` | Explicit union type | Enforces enum at both FE (zod) and BE (validation) |
