@@ -72,6 +72,10 @@ Note: `GET /standard` uses the singular form as specified in the Swagger contrac
 - This is non-standard but supported by Express and the browser `fetch` API
 - If proxy compatibility becomes a concern, switch to `POST /history/delete`
 
+### CORS
+- Express uses `cors()` middleware configured to allow `http://localhost:5173` in development
+- Vite proxy (`/api` → `http://localhost:3000`) handles requests in dev, so CORS is a safety net rather than the primary mechanism
+
 ### Error Response Shape
 All error responses use the shape `{ error: string }` with an appropriate HTTP status code:
 - `400` — validation error
