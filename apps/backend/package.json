@@ -6,7 +6,8 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "seed": "tsx src/seed.ts"
   },
   "dependencies": {
     "@easyrice/shared": "workspace:*",
