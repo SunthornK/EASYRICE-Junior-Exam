@@ -22,11 +22,11 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Install build tools (for native addons)
+        run: sudo apt-get install -y python3 make g++
+
       - name: Install dependencies
         run: pnpm install
-
-      - name: Rebuild native addons
-        run: pnpm rebuild better-sqlite3
 
       - name: Build shared package
         run: pnpm --filter @easyrice/shared build
