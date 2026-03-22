@@ -1,6 +1,6 @@
 export type Condition = 'GT' | 'GE' | 'LT' | 'LE'
 export type GrainShape = 'wholegrain' | 'broken'
-export type GrainType = 'white' | 'yellow' | 'red' | 'damage' | 'paddy' | 'chalky' | 'glutinous'
+export type GrainType = 'white' | 'yellow' | 'red' | 'damage' | 'paddy' | 'chalky' | 'glutinous' | 'undermilled'
 export type SamplingPoint = 'Front End' | 'Back End' | 'Other'
 
 export interface RawGrain {
@@ -51,6 +51,7 @@ export interface Inspection {
   name: string
   standardId: string
   standardName: string
+  imageURL?: string
   note?: string
   price?: number
   samplingPoint?: SamplingPoint[]
@@ -74,6 +75,7 @@ export interface HistoryListItem {
 export interface CreateInspectionPayload {
   name: string
   standardId: string
+  imageURL?: string
   note?: string
   price?: number
   samplingPoint?: SamplingPoint[]
