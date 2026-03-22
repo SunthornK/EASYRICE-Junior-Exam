@@ -2,6 +2,10 @@
 
 A full-stack rice inspection web application built as a one-week junior developer exam. The system allows users to create, view, edit, and manage rice grain inspection records with automated composition and defect analysis.
 
+| History Page | Inspection Result |
+|---|---|
+| ![History](screenshots/history.png) | ![View](screenshots/view.png) |
+
 ---
 
 ## Tech Stack
@@ -133,7 +137,7 @@ pnpm --filter @easyrice/frontend dev
 - Card 1: Create/Update timestamps, Inspection ID, Standard, Total Sample
 - Card 2: Note, Price, Sampling Date/Time, Sampling Point
 - Composition table: grain categories with length ranges and percentages
-- Defect table: 6 defect types (yellow, paddy, damaged, glutinous, chalky, red) always shown with total row
+- Defect table: 6 defect types (yellow, paddy, damaged, glutinous, chalky, red) always shown — 7 rows total including the Total summary row
 - Back and Edit navigation buttons
 
 ### Edit Inspection Page
