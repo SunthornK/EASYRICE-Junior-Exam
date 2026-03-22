@@ -7,6 +7,7 @@ function rowToInspection(row: any): Inspection {
     name: row.name,
     standardId: row.standard_id,
     standardName: row.standard_name,
+    imageURL: row.image_url ?? undefined,
     note: row.note ?? undefined,
     price: row.price ?? undefined,
     samplingPoint: row.sampling_point ? JSON.parse(row.sampling_point) : undefined,
@@ -22,12 +23,12 @@ function rowToInspection(row: any): Inspection {
 export function insertInspection(i: Inspection): void {
   getDb().prepare(`
     INSERT INTO inspections
-    (id, name, standard_id, standard_name, note, price, sampling_point,
+    (id, name, standard_id, standard_name, image_url, note, price, sampling_point,
      sampling_date, total_sample, composition, defects, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     i.id, i.name, i.standardId, i.standardName,
-    i.note ?? null, i.price ?? null,
+    i.imageURL ?? null, i.note ?? null, i.price ?? null,
     i.samplingPoint ? JSON.stringify(i.samplingPoint) : null,
     i.samplingDate ?? null, i.totalSample,
     JSON.stringify(i.composition), JSON.stringify(i.defects),
@@ -40,11 +41,33 @@ export function findInspectionById(id: string): Inspection | undefined {
   return row ? rowToInspection(row) : undefined
 }
 
-export function findAllInspections(inspectionId?: string): HistoryListItem[] {
+export function findAllInspections(params?: {
+  inspectionId?: string
+  fromDate?: string
+  toDate?: string
+}): HistoryListItem[] {
   const db = getDb()
-  const rows: any[] = inspectionId
-    ? db.prepare(`SELECT id, name, standard_name, note, created_at FROM inspections WHERE id LIKE ? ORDER BY created_at DESC`).all(`%${inspectionId}%`)
-    : db.prepare(`SELECT id, name, standard_name, note, created_at FROM inspections ORDER BY created_at DESC`).all()
+  const conditions: string[] = []
+  const values: string[] = []
+
+  if (params?.inspectionId) {
+    conditions.push('id LIKE ?')
+    values.push(`%${params.inspectionId}%`)
+  }
+  if (params?.fromDate) {
+    conditions.push('created_at >= ?')
+    values.push(params.fromDate)
+  }
+  if (params?.toDate) {
+    conditions.push('created_at <= ?')
+    values.push(params.toDate)
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+  const rows: any[] = db
+    .prepare(`SELECT id, name, standard_name, note, created_at FROM inspections ${where} ORDER BY created_at DESC`)
+    .all(...values)
+
   return rows.map(r => ({
     id: r.id, name: r.name, standardName: r.standard_name,
     note: r.note ?? undefined, createdAt: r.created_at,

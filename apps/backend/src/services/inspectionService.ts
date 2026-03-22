@@ -1,8 +1,14 @@
 import type { RawGrain, Standard, CompositionRow, DefectRow, GrainType } from '@easyrice/shared'
 
-const DEFECT_NAMES: Record<GrainType, string> = {
-  white: 'ข้าวขาว', yellow: 'ข้าวเหลือง', red: 'ข้าวแดง',
-  damage: 'ข้าวเสีย', paddy: 'ข้าวเปลือก', chalky: 'ข้าวท้องไข่', glutinous: 'ข้าวเหนียว',
+// white is not a defect — it is the primary grain type
+// Order and names match the design: yellow, paddy, damaged, glutinous, chalky, red
+const DEFECT_NAMES: Partial<Record<GrainType, string>> = {
+  yellow: 'yellow',
+  paddy: 'paddy',
+  damage: 'damaged',
+  glutinous: 'glutinous',
+  chalky: 'chalky',
+  red: 'red',
 }
 
 function matchesLength(length: number, min: number, max: number, condMin: string, condMax: string): boolean {
@@ -44,13 +50,12 @@ export function calculate(grains: RawGrain[], standard: Standard): CalculationRe
     actualWeight: round2(compWeights[sub.key]),
   }))
 
-  const defects: DefectRow[] = (Object.keys(DEFECT_NAMES) as GrainType[])
-    .filter(type => defectWeights[type] !== undefined)
-    .map(type => ({
-      type, name: DEFECT_NAMES[type],
-      actualPercent: totalWeight > 0 ? round2((defectWeights[type]! / totalWeight) * 100) : 0,
-      actualWeight: round2(defectWeights[type]!),
-    }))
+  const defects: DefectRow[] = (Object.keys(DEFECT_NAMES) as GrainType[]).map(type => ({
+    type,
+    name: DEFECT_NAMES[type]!,
+    actualPercent: totalWeight > 0 ? round2(((defectWeights[type] ?? 0) / totalWeight) * 100) : 0,
+    actualWeight: round2(defectWeights[type] ?? 0),
+  }))
 
   return { composition, defects, totalSample: grains.length }
 }

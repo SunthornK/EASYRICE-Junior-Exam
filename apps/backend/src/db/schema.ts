@@ -23,6 +23,7 @@ export function initDb(filepath?: string): void {
       name           TEXT NOT NULL,
       standard_id    TEXT NOT NULL,
       standard_name  TEXT NOT NULL,
+      image_url      TEXT,
       note           TEXT,
       price          REAL,
       sampling_point TEXT,

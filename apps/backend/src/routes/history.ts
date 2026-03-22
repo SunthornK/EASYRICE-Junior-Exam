@@ -11,8 +11,8 @@ import type { CreateInspectionPayload, UpdateInspectionPayload, RawGrain } from 
 export const historyRouter = Router()
 
 historyRouter.get('/', (req: Request, res: Response) => {
-  const inspectionId = req.query.inspectionId as string | undefined
-  res.json(findAllInspections(inspectionId))
+  const { inspectionId, fromDate, toDate } = req.query as Record<string, string | undefined>
+  res.json(findAllInspections({ inspectionId, fromDate, toDate }))
 })
 
 historyRouter.get('/:id', (req: Request, res: Response) => {
@@ -30,6 +30,8 @@ historyRouter.post('/', async (req: Request, res: Response) => {
   if (!standard) return res.status(400).json({ error: 'Standard not found' })
 
   let grains: RawGrain[]
+  let imageURL: string | undefined = body.imageURL
+
   if (body.rawData) {
     grains = body.rawData
   } else {
@@ -37,7 +39,9 @@ historyRouter.post('/', async (req: Request, res: Response) => {
     if (!url) return res.status(500).json({ error: 'RAW_JSON_URL not configured' })
     const fetchRes = await fetch(url)
     if (!fetchRes.ok) return res.status(502).json({ error: 'Failed to fetch raw grain data' })
-    grains = await fetchRes.json() as RawGrain[]
+    const rawJson = await fetchRes.json() as { grains?: RawGrain[]; imageURL?: string } | RawGrain[]
+    grains = Array.isArray(rawJson) ? rawJson : (rawJson.grains ?? [])
+    if (!Array.isArray(rawJson) && rawJson.imageURL) imageURL = rawJson.imageURL
   }
 
   const { composition, defects, totalSample } = calculate(grains, standard)
@@ -45,6 +49,7 @@ historyRouter.post('/', async (req: Request, res: Response) => {
   const inspection = {
     id: nanoid(), name: body.name,
     standardId: body.standardId, standardName: standard.name,
+    imageURL,
     note: body.note, price: body.price,
     samplingPoint: body.samplingPoint, samplingDate: body.samplingDate,
     totalSample, composition, defects, createdAt: now, updatedAt: now,
