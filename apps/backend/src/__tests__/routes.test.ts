@@ -83,4 +83,74 @@ describe('DELETE /history', () => {
     expect(del.status).toBe(204)
     expect((await request(app).get(`/history/${created.body.id}`)).status).toBe(404)
   })
+
+  it('returns 400 when ids is empty', async () => {
+    const res = await request(createApp()).delete('/history').send({ ids: [] })
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /history with ?inspectionId filter', () => {
+  it('returns only matching records', async () => {
+    const app = createApp()
+    const a = await request(app).post('/history').send({ name: 'Filter-A', standardId: 'std-test', rawData: grains })
+    await request(app).post('/history').send({ name: 'Filter-B', standardId: 'std-test', rawData: grains })
+    const id = a.body.id as string
+    const res = await request(app).get(`/history?inspectionId=${id.slice(0, 4)}`)
+    expect(res.status).toBe(200)
+    expect(res.body.every((r: { id: string }) => r.id.includes(id.slice(0, 4)))).toBe(true)
+  })
+})
+
+describe('GET /history with date range filter', () => {
+  it('returns records within fromDate–toDate range', async () => {
+    const app = createApp()
+    await request(app).post('/history').send({ name: 'Date-Test', standardId: 'std-test', rawData: grains })
+
+    const from = new Date(Date.now() - 60_000).toISOString()
+    const to = new Date(Date.now() + 60_000).toISOString()
+
+    const res = await request(app).get(`/history?fromDate=${from}&toDate=${to}`)
+    expect(res.status).toBe(200)
+    expect(res.body.length).toBeGreaterThan(0)
+  })
+
+  it('returns empty when range excludes all records', async () => {
+    const app = createApp()
+    await request(app).post('/history').send({ name: 'Old-Record', standardId: 'std-test', rawData: grains })
+
+    const from = new Date('2000-01-01').toISOString()
+    const to = new Date('2000-01-02').toISOString()
+
+    const res = await request(app).get(`/history?fromDate=${from}&toDate=${to}`)
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveLength(0)
+  })
+})
+
+describe('PUT /history/:id', () => {
+  it('returns 404 for unknown id', async () => {
+    const res = await request(createApp()).put('/history/nonexistent').send({ note: 'x' })
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('POST /history — full fields', () => {
+  it('saves and returns all optional fields', async () => {
+    const app = createApp()
+    const res = await request(app).post('/history').send({
+      name: 'Full',
+      standardId: 'std-test',
+      rawData: grains,
+      note: 'test note',
+      price: 9999,
+      samplingPoint: ['Front End', 'Other'],
+      samplingDate: '2024-06-01T10:00:00.000Z',
+    })
+    expect(res.status).toBe(201)
+    expect(res.body.note).toBe('test note')
+    expect(res.body.price).toBe(9999)
+    expect(res.body.samplingPoint).toEqual(['Front End', 'Other'])
+    expect(res.body.samplingDate).toBe('2024-06-01T10:00:00.000Z')
+  })
 })

@@ -22,7 +22,7 @@ const sample: Inspection = {
     conditionMin: 'GE', conditionMax: 'LE',
     actualPercent: 80, actualWeight: 0.08
   }],
-  defects: [{ type: 'yellow', name: 'ข้าวเหลือง', actualPercent: 20, actualWeight: 0.02 }],
+  defects: [{ type: 'yellow', name: 'yellow', actualPercent: 20, actualWeight: 0.02 }],
   createdAt: '2026-03-20T10:00:00.000Z',
   updatedAt: '2026-03-20T10:00:00.000Z',
 }
@@ -51,9 +51,15 @@ describe('findAllInspections', () => {
   it('filters by partial inspectionId match', () => {
     insertInspection(sample)
     insertInspection({ ...sample, id: 'test-2', name: 'Other' })
-    expect(findAllInspections('test-1')).toHaveLength(1)
-    expect(findAllInspections('test')).toHaveLength(2)
-    expect(findAllInspections('xyz')).toHaveLength(0)
+    expect(findAllInspections({ inspectionId: 'test-1' })).toHaveLength(1)
+    expect(findAllInspections({ inspectionId: 'test' })).toHaveLength(2)
+    expect(findAllInspections({ inspectionId: 'xyz' })).toHaveLength(0)
+  })
+
+  it('filters by fromDate/toDate range', () => {
+    insertInspection(sample)
+    expect(findAllInspections({ fromDate: '2026-01-01T00:00:00.000Z', toDate: '2026-12-31T23:59:59.000Z' })).toHaveLength(1)
+    expect(findAllInspections({ fromDate: '2020-01-01T00:00:00.000Z', toDate: '2020-12-31T23:59:59.000Z' })).toHaveLength(0)
   })
 })
 

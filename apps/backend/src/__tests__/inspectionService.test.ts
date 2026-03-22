@@ -64,4 +64,52 @@ describe('calculate', () => {
       expect(r.actualPercent).toBe(Math.round(r.actualPercent * 100) / 100)
     })
   })
+
+  it('always returns all 6 spec defect types even if grains have 0 weight', () => {
+    const whiteOnlyGrains: RawGrain[] = [
+      { length: 7.0, weight: 0.05, shape: 'wholegrain', type: 'white' },
+    ]
+    const result = calculate(whiteOnlyGrains, standard)
+    const defectTypes = result.defects.map(d => d.type)
+    expect(defectTypes).toContain('yellow')
+    expect(defectTypes).toContain('chalky')
+    expect(defectTypes).toContain('paddy')
+    expect(defectTypes).toContain('red')
+    expect(defectTypes).toContain('damage')
+    expect(defectTypes).toContain('glutinous')
+    // white is not a defect
+    expect(defectTypes).not.toContain('white')
+    // all zero since only white grains provided
+    result.defects.forEach(d => expect(d.actualPercent).toBe(0))
+  })
+
+  it('classifies grains using real standards GT/LT conditions', () => {
+    const realStandard: Standard = {
+      id: 'real', name: 'มาตรฐานข้าวชั้น 1', createDate: '2022-02-23',
+      standardData: [
+        { key: 'wholegrain', name: 'ข้าวเต็มเมล็ด', minLength: 7, maxLength: 99, conditionMin: 'GT', conditionMax: 'LT', shape: ['wholegrain', 'broken'] },
+        { key: 'broken_rice1', name: 'ข้าวหักใหญ่', minLength: 3.5, maxLength: 7, conditionMin: 'GT', conditionMax: 'LT', shape: ['wholegrain', 'broken'] },
+        { key: 'broken_rice2', name: 'ข้าวหักทั่วไป', minLength: 0, maxLength: 3.5, conditionMin: 'GT', conditionMax: 'LT', shape: ['wholegrain', 'broken'] },
+      ],
+    }
+    const testGrains: RawGrain[] = [
+      { length: 7.0, weight: 0.02, shape: 'wholegrain', type: 'white' },  // boundary — NOT GT 7, goes unmatched
+      { length: 7.5, weight: 0.02, shape: 'wholegrain', type: 'white' },  // wholegrain
+      { length: 5.0, weight: 0.01, shape: 'broken', type: 'chalky' },     // broken_rice1
+      { length: 3.5, weight: 0.01, shape: 'broken', type: 'yellow' },     // boundary — NOT GT 3.5, unmatched
+      { length: 2.0, weight: 0.01, shape: 'broken', type: 'white' },      // broken_rice2
+    ]
+    const result = calculate(testGrains, realStandard)
+    expect(result.composition.find(c => c.key === 'wholegrain')!.actualWeight).toBeCloseTo(0.02, 5)
+    expect(result.composition.find(c => c.key === 'broken_rice1')!.actualWeight).toBeCloseTo(0.01, 5)
+    expect(result.composition.find(c => c.key === 'broken_rice2')!.actualWeight).toBeCloseTo(0.01, 5)
+  })
+
+  it('returns all defect types with zero values for empty grain list', () => {
+    const result = calculate([], standard)
+    expect(result.totalSample).toBe(0)
+    expect(result.defects).toHaveLength(6)
+    result.defects.forEach(r => expect(r.actualPercent).toBe(0))
+    result.composition.forEach(r => expect(r.actualPercent).toBe(0))
+  })
 })
