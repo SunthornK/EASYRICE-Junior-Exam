@@ -145,7 +145,7 @@ export default function EditPage() {
               disabled={mutation.isPending}
               className="flex-1 px-4 py-2 text-sm font-semibold bg-[#0F954D] hover:bg-[#0d8544] text-white rounded disabled:opacity-50"
             >
-              {mutation.isPending ? 'Saving...' : 'Submit'}
+              {mutation.isPending ? 'Saving...' : 'Update Changes'}
             </button>
           </div>
 

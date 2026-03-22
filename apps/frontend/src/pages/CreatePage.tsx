@@ -43,13 +43,14 @@ export default function CreatePage() {
     staleTime: Infinity,
   })
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       samplingDate: new Date().toISOString().slice(0, 16),
       samplingPoints: [],
     },
   })
+  const nameValue = watch('name')
 
   const mutation = useMutation({
     mutationFn: createInspection,
@@ -202,7 +203,7 @@ export default function CreatePage() {
             </button>
             <button
               type="submit"
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || !nameValue?.trim()}
               className="flex-1 sm:flex-none px-4 py-2 text-sm font-semibold bg-[#0F954D] hover:bg-[#0d8544] text-white rounded disabled:opacity-50"
             >
               {mutation.isPending ? 'Submitting...' : 'Submit'}

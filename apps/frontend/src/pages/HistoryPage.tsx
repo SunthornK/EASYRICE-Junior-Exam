@@ -10,6 +10,7 @@ function formatDateTime(iso: string) {
 }
 
 const EMPTY_FILTERS = { inspectionId: '', fromDate: '', toDate: '' }
+const ROWS_OPTIONS = [10, 20, 50]
 
 export default function HistoryPage() {
   const navigate = useNavigate()
@@ -18,6 +19,8 @@ export default function HistoryPage() {
   const [inputs, setInputs] = useState(EMPTY_FILTERS)
   const [activeFilters, setActiveFilters] = useState<{ inspectionId?: string; fromDate?: string; toDate?: string }>({})
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [currentPage, setCurrentPage] = useState(1)
+  const [rowsPerPage, setRowsPerPage] = useState(10)
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['history', activeFilters],
@@ -43,12 +46,14 @@ export default function HistoryPage() {
       toDate: inputs.toDate || undefined,
     })
     setSelected(new Set())
+    setCurrentPage(1)
   }
 
   function handleClear() {
     setInputs(EMPTY_FILTERS)
     setActiveFilters({})
     setSelected(new Set())
+    setCurrentPage(1)
   }
 
   function toggleRow(id: string) {
@@ -60,13 +65,35 @@ export default function HistoryPage() {
   }
 
   function toggleAll() {
-    setSelected(selected.size === items.length && items.length > 0 ? new Set() : new Set(items.map(i => i.id)))
+    setSelected(selected.size === pagedItems.length && pagedItems.length > 0
+      ? new Set()
+      : new Set(pagedItems.map(i => i.id)))
   }
 
   function handleDelete() {
     if (selected.size === 0) return
     if (!confirm(`Delete ${selected.size} item(s)?`)) return
     deleteMutation.mutate(Array.from(selected))
+  }
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(items.length / rowsPerPage))
+  const safePage = Math.min(currentPage, totalPages)
+  const startIdx = (safePage - 1) * rowsPerPage
+  const pagedItems = items.slice(startIdx, startIdx + rowsPerPage)
+
+  function getPageNumbers() {
+    const pages: (number | '...')[] = []
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i)
+    } else {
+      pages.push(1)
+      if (safePage > 3) pages.push('...')
+      for (let i = Math.max(2, safePage - 1); i <= Math.min(totalPages - 1, safePage + 1); i++) pages.push(i)
+      if (safePage < totalPages - 2) pages.push('...')
+      pages.push(totalPages)
+    }
+    return pages
   }
 
   return (
@@ -95,7 +122,7 @@ export default function HistoryPage() {
           />
         </div>
         <div className="w-full sm:w-auto">
-          <label className="block text-xs text-gray-500 mb-1">Form Date</label>
+          <label className="block text-xs text-gray-500 mb-1">From Date</label>
           <input
             type="date"
             value={inputs.fromDate}
@@ -138,12 +165,12 @@ export default function HistoryPage() {
             Delete
           </button>
           <span className="text-sm text-gray-600">
-            Select Items: {selected.size} Item{selected.size > 1 ? 's' : ''}
+            Selected: {selected.size} item{selected.size > 1 ? 's' : ''}
           </span>
         </div>
       )}
 
-      {/* Table — scrollable on mobile */}
+      {/* Table */}
       <div className="border border-gray-200 rounded overflow-hidden overflow-x-auto">
         <table className="w-full text-sm min-w-150">
           <thead>
@@ -151,7 +178,7 @@ export default function HistoryPage() {
               <th className="px-3 py-2 w-10">
                 <input
                   type="checkbox"
-                  checked={items.length > 0 && selected.size === items.length}
+                  checked={pagedItems.length > 0 && pagedItems.every(i => selected.has(i.id))}
                   onChange={toggleAll}
                   className="accent-white"
                 />
@@ -168,12 +195,12 @@ export default function HistoryPage() {
               <tr>
                 <td colSpan={6} className="text-center py-10 text-gray-400">Loading...</td>
               </tr>
-            ) : items.length === 0 ? (
+            ) : pagedItems.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-10 text-gray-400">No records found</td>
               </tr>
             ) : (
-              items.map((item: HistoryListItem, idx: number) => (
+              pagedItems.map((item: HistoryListItem, idx: number) => (
                 <tr
                   key={item.id}
                   className={`border-t border-gray-100 cursor-pointer hover:bg-gray-50 ${selected.has(item.id) ? 'bg-green-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
@@ -208,10 +235,49 @@ export default function HistoryPage() {
         </table>
       </div>
 
-      <div className="flex items-center gap-2 mt-3 text-sm text-gray-500">
-        <span>1-{items.length} of {items.length}</span>
-        <button className="px-1 hover:text-gray-700">{'<'}</button>
-        <button className="px-1 hover:text-gray-700">{'>'}</button>
+      {/* Pagination */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-3 text-sm text-gray-600">
+        <div className="flex items-center gap-2">
+          <span>Rows per page:</span>
+          <select
+            value={rowsPerPage}
+            onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
+            className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none"
+          >
+            {ROWS_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <span className="text-gray-400">
+            {items.length === 0 ? '0' : `${startIdx + 1}–${Math.min(startIdx + rowsPerPage, items.length)}`} of {items.length}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={safePage === 1}
+            className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ‹
+          </button>
+          {getPageNumbers().map((p, i) =>
+            p === '...'
+              ? <span key={`ellipsis-${i}`} className="px-2">…</span>
+              : <button
+                  key={p}
+                  onClick={() => setCurrentPage(p)}
+                  className={`px-2.5 py-1 rounded border text-sm ${safePage === p ? 'bg-[#0F954D] text-white border-[#0F954D]' : 'border-gray-300 hover:bg-gray-100'}`}
+                >
+                  {p}
+                </button>
+          )}
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={safePage === totalPages}
+            className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ›
+          </button>
+        </div>
       </div>
     </div>
   )
