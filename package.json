@@ -5,5 +5,8 @@
     "dev": "pnpm --parallel run dev",
     "build": "pnpm --recursive run build",
     "test": "pnpm --recursive run test"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3"]
   }
 }

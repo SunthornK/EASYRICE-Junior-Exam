@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -43,14 +43,14 @@ export default function CreatePage() {
     staleTime: Infinity,
   })
 
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, control, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       samplingDate: new Date().toISOString().slice(0, 16),
       samplingPoints: [],
     },
   })
-  const nameValue = watch('name')
+  const nameValue = useWatch({ control, name: 'name' })
 
   const mutation = useMutation({
     mutationFn: createInspection,
