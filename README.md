@@ -1,5 +1,8 @@
 # EasyRice — Junior Exam Project
 
+[![Tests](https://github.com/SunthornK/EASYRICE-Junior-Exam/actions/workflows/test.yml/badge.svg)](https://github.com/SunthornK/EASYRICE-Junior-Exam/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/SunthornK/EASYRICE-Junior-Exam/branch/master/graph/badge.svg)](https://codecov.io/gh/SunthornK/EASYRICE-Junior-Exam)
+
 A full-stack rice inspection web application built as a one-week junior developer exam. The system allows users to create, view, edit, and manage rice grain inspection records with automated composition and defect analysis.
 
 | History Page | Inspection Result |
